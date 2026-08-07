@@ -1,0 +1,23 @@
+# Data & Outputs (Store these locally or in S3/bucket, not Git)
+data/
+*.pdb
+*.cif
+*.bam
+*.fastq
+*.tsv
+*.csv
+
+# Python Environment & Cache
+.venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Environment Secrets
+.env
+
+# IDE / OS
+.vscode/
+.DS_Store

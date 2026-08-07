@@ -1,0 +1,16 @@
+name: eva
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - biopython
+  - requests
+  - python-dotenv
+  - pytest
+  - ruff
+  - fpocket
+  - pip
+  - pip:
+    - streamlit
