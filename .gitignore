@@ -1,5 +1,5 @@
 # Data & Outputs (Store these locally or in S3/bucket, not Git)
-data/
+data/raw/
 *.pdb
 *.cif
 *.bam
