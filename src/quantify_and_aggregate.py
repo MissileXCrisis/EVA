@@ -59,7 +59,7 @@ def run_salmon_quant(sra_id: str) -> Path:
         str(output_sample_dir),
         "--validateMappings",
         "-p",
-        "4",
+        "6",
     ]
 
     try:

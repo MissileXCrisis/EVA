@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 RAW_FASTQ_DIR = RAW_DIR / "fastq"
-CLEANED_FASTQ_DIR = DATA_DIR / "fastq_cleaned"
+CLEANED_FASTQ_DIR = RAW_DIR / "fastq_cleaned"
 PROCESSED_DIR = DATA_DIR / "processed"
 QUANT_DIR = DATA_DIR / "quants"
 
