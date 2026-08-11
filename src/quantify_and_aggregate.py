@@ -10,12 +10,12 @@ import pandas as pd
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import (
     CLEANED_FASTQ_DIR,
-    CONTROL_RUNS,
     DMD_RUNS,
     PROCESSED_DIR,
     QUANT_DIR,
     SALMON_INDEX_DIR,
     TARGET_RUNS,
+    WT_RUNS,
 )
 
 
@@ -31,7 +31,7 @@ def purge_file_from_ram(file_path: Path):
 
 
 def run_salmon_quant(sra_id: str) -> Path:
-    """Executes Salmon quantification on a single sample."""
+    """Executes Salmon quantification on a single cleaned sample."""
     fastq_in = CLEANED_FASTQ_DIR / f"{sra_id}.clean.fastq"
     output_sample_dir = QUANT_DIR / sra_id
     quant_file = output_sample_dir / "quant.sf"
@@ -41,7 +41,7 @@ def run_salmon_quant(sra_id: str) -> Path:
         return None
 
     if quant_file.exists():
-        print(f"[✓] Quant file already exists for {sra_id}, skipping Salmon execution.")
+        print(f"[✓] Quant file already exists for {sra_id}, skipping.")
         return quant_file
 
     print(f"\n[+] Running Salmon quantification for {sra_id}...")
@@ -52,7 +52,7 @@ def run_salmon_quant(sra_id: str) -> Path:
         "-i",
         str(SALMON_INDEX_DIR),
         "-l",
-        "A",  # Automatic library type detection
+        "A",
         "-r",
         str(fastq_in),
         "-o",
@@ -80,38 +80,34 @@ def parse_and_aggregate_quants() -> Path:
 
     dataframes = {}
 
-    # Read each sample's quant.sf file
     for sra_id in TARGET_RUNS:
         quant_file = QUANT_DIR / sra_id / "quant.sf"
         if not quant_file.exists():
-            print(f"[X] Quant file missing for {sra_id}. Cannot compute complete matrix.")
+            print(f"[X] Quant file missing for {sra_id}. Cannot compute matrix.")
             sys.exit(1)
 
-        # Read Name (Transcript ID) and TPM columns
         df = pd.read_csv(quant_file, sep="\t", usecols=["Name", "TPM"])
-        # Clean Ensembl transcript IDs (remove version numbers if present, e.g., ENS...1 -> ENS...)
         df["Transcript_ID"] = df["Name"].str.split(".").str[0]
         dataframes[sra_id] = df.set_index("Transcript_ID")["TPM"]
 
-    # Combine all sample TPMs into a single DataFrame
     master_df = pd.DataFrame(dataframes)
 
-    # Calculate Group Means
-    master_df["mean_TPM_WT"] = master_df[CONTROL_RUNS].mean(axis=1)
+    # Compute group averages
+    master_df["mean_TPM_WT"] = master_df[WT_RUNS].mean(axis=1)
     master_df["mean_TPM_DMD"] = master_df[DMD_RUNS].mean(axis=1)
 
-    # Calculate Fold Change and Fold-Change Ratio (handling division by zero)
+    # Compute Fold Change
     master_df["fold_change"] = (master_df["mean_TPM_DMD"] + 0.01) / (
         master_df["mean_TPM_WT"] + 0.01
     )
 
-    # Calculate Relative Isoform Inclusion / PSI Proxy (Psi = TPM_isoform / Total_TPM_sample)
+    # Compute PSI proxy (Isoform Fraction)
     total_tpm_dmd = master_df["mean_TPM_DMD"].sum()
     master_df["PSI_DMD"] = (
         master_df["mean_TPM_DMD"] / total_tpm_dmd if total_tpm_dmd > 0 else 0
     )
 
-    # Filter out unexpressed transcripts to keep file lightweight
+    # Filter out unexpressed transcripts
     filtered_df = master_df[
         (master_df["mean_TPM_WT"] > 0.1) | (master_df["mean_TPM_DMD"] > 0.1)
     ].reset_index()
@@ -119,18 +115,13 @@ def parse_and_aggregate_quants() -> Path:
     output_csv = PROCESSED_DIR / "dmd_splicing_matrix.csv"
     filtered_df.to_csv(output_csv, index=False)
 
-    print(f"[✓] Matrix saved successfully ({len(filtered_df)} transcripts) to: {output_csv}")
+    print(f"[✓] Matrix saved ({len(filtered_df)} transcripts) to: {output_csv}")
     return output_csv
 
 
 def main():
     if shutil.which("salmon") is None:
         print("ERROR: 'salmon' binary not found in active environment.")
-        sys.exit(1)
-
-    if not SALMON_INDEX_DIR.exists():
-        print(f"ERROR: Salmon index directory not found at {SALMON_INDEX_DIR}.")
-        print("Please build the index first using the salmon index command.")
         sys.exit(1)
 
     QUANT_DIR.mkdir(parents=True, exist_ok=True)

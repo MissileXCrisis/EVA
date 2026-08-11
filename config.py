@@ -9,7 +9,15 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 RAW_FASTQ_DIR = RAW_DIR / "fastq"
+CLEANED_FASTQ_DIR = DATA_DIR / "fastq_cleaned"
 PROCESSED_DIR = DATA_DIR / "processed"
+QUANT_DIR = DATA_DIR / "quants"
+
+# Reference & Salmon Paths
+REFERENCE_DIR = DATA_DIR / "reference"
+SALMON_INDEX_DIR = DATA_DIR / "salmon_index"
+TRANSCRIPTOME_FASTA = REFERENCE_DIR / "Sus_scrofa.Sscrofa11.1.cdna.all.fa.gz"
+TRANSCRIPTOME_URL = "https://ftp.ensembl.org/pub/release-110/fasta/sus_scrofa/cdna/Sus_scrofa.Sscrofa11.1.cdna.all.fa.gz"
 
 # SRA Target Runs (Pig DMD Satellite Cell Study - Differentiation Stage)
 WT_RUNS = [

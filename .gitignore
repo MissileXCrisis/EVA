@@ -1,5 +1,7 @@
 # Data & Outputs (Store these locally or in S3/bucket, not Git)
 data/raw/
+data/reference/
+data/salmon_index/
 *.pdb
 *.cif
 *.bam
