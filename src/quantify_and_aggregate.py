@@ -35,16 +35,18 @@ def purge_file_from_ram(file_path: Path):
 def get_tx2gene_map(fasta_path: Path) -> dict:
     """Parses Ensembl Sus scrofa cDNA headers to map Transcript IDs to Gene IDs."""
     tx2gene = {}
+    #File Existence Check
     if not fasta_path.exists():
         print(f"[!] Warning: cDNA reference missing at {fasta_path}.")
         return tx2gene
 
+    # Streaming a Compressed FASTA File
     print(f"[+] Extracting Tx-to-Gene map from {fasta_path.name}...")
     with gzip.open(fasta_path, "rt") as handle:
+        # Filtering for Header Lines
         for line in handle:
             if line.startswith(">"):
                 parts = line.strip().split()
-                # Extract Transcript ID (e.g. ENSSSCT00000001234 from >ENSSSCT00000001234.1)
                 tx_id = parts[0][1:].split(".")[0]
 
                 # Locate the gene: field in the Ensembl header
@@ -107,7 +109,7 @@ def run_salmon_quant(sra_id: str) -> Path:
 
 
 def parse_and_aggregate_quants() -> Path:
-    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and per-gene Isoform Fraction (PSI_DMD)."""
+    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and per-gene Isoform Fraction (IF_DMD)."""
     print("\n[+] Merging sample quantifications into master splicing matrix...")
 
     dataframes = {}
@@ -138,12 +140,12 @@ def parse_and_aggregate_quants() -> Path:
     if tx2gene:
         master_df["Gene_ID"] = master_df.index.map(tx2gene)
 
-    # Compute Isoform Fraction (PSI_DMD) PER GENE
+    # Compute Isoform Fraction (IF_DMD) PER GENE
     if "Gene_ID" in master_df.columns and master_df["Gene_ID"].notna().any():
         gene_totals = master_df.groupby("Gene_ID")["mean_TPM_DMD"].transform("sum")
-        master_df["PSI_DMD"] = master_df["mean_TPM_DMD"] / (gene_totals + 1e-5)
+        master_df["IF_DMD"] = master_df["mean_TPM_DMD"] / (gene_totals + 1e-5)
     else:
-        print("[!] Warning: Could not map Gene_IDs. Skipping PSI_DMD calculation.")
+        print("[!] Warning: Could not map Gene_IDs. Skipping IF_DMD calculation.")
 
     # Filter out unexpressed transcripts (threshold > 0.1 TPM in either condition)
     filtered_df = master_df[
