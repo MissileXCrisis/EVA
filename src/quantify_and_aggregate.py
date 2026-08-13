@@ -1,5 +1,6 @@
 # src/quantify_and_aggregate.py
 
+import gzip
 import os
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ from config import (
     QUANT_DIR,
     SALMON_INDEX_DIR,
     TARGET_RUNS,
+    TRANSCRIPTOME_FASTA,  # Imported directly from config.py
     WT_RUNS,
 )
 
@@ -28,6 +30,36 @@ def purge_file_from_ram(file_path: Path):
             os.close(fd)
         except Exception:
             pass
+
+
+def get_tx2gene_map(fasta_path: Path) -> dict:
+    """Parses Ensembl Sus scrofa cDNA headers to map Transcript IDs to Gene IDs."""
+    tx2gene = {}
+    if not fasta_path.exists():
+        print(f"[!] Warning: cDNA reference missing at {fasta_path}.")
+        return tx2gene
+
+    print(f"[+] Extracting Tx-to-Gene map from {fasta_path.name}...")
+    with gzip.open(fasta_path, "rt") as handle:
+        for line in handle:
+            if line.startswith(">"):
+                parts = line.strip().split()
+                # Extract Transcript ID (e.g. ENSSSCT00000001234 from >ENSSSCT00000001234.1)
+                tx_id = parts[0][1:].split(".")[0]
+
+                # Locate the gene: field in the Ensembl header
+                gene_id = None
+                for part in parts:
+                    if part.startswith("gene:"):
+                        # Extract Gene ID (e.g. ENSSSCG00000005678 from gene:ENSSSCG00000005678.1)
+                        gene_id = part.split(":")[1].split(".")[0]
+                        break
+
+                if gene_id:
+                    tx2gene[tx_id] = gene_id
+
+    print(f"[✓] Mapped {len(tx2gene):,} transcripts to parent genes.")
+    return tx2gene
 
 
 def run_salmon_quant(sra_id: str) -> Path:
@@ -59,7 +91,7 @@ def run_salmon_quant(sra_id: str) -> Path:
         str(output_sample_dir),
         "--validateMappings",
         "-p",
-        "6",
+        "8",
     ]
 
     try:
@@ -75,7 +107,7 @@ def run_salmon_quant(sra_id: str) -> Path:
 
 
 def parse_and_aggregate_quants() -> Path:
-    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and PSI proxy."""
+    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and per-gene Isoform Fraction (PSI_DMD)."""
     print("\n[+] Merging sample quantifications into master splicing matrix...")
 
     dataframes = {}
@@ -101,13 +133,19 @@ def parse_and_aggregate_quants() -> Path:
         master_df["mean_TPM_WT"] + 0.01
     )
 
-    # Compute PSI proxy (Isoform Fraction)
-    total_tpm_dmd = master_df["mean_TPM_DMD"].sum()
-    master_df["PSI_DMD"] = (
-        master_df["mean_TPM_DMD"] / total_tpm_dmd if total_tpm_dmd > 0 else 0
-    )
+    # Map Transcript_ID to Gene_ID using TRANSCRIPTOME_FASTA from config.py
+    tx2gene = get_tx2gene_map(TRANSCRIPTOME_FASTA)
+    if tx2gene:
+        master_df["Gene_ID"] = master_df.index.map(tx2gene)
 
-    # Filter out unexpressed transcripts
+    # Compute Isoform Fraction (PSI_DMD) PER GENE
+    if "Gene_ID" in master_df.columns and master_df["Gene_ID"].notna().any():
+        gene_totals = master_df.groupby("Gene_ID")["mean_TPM_DMD"].transform("sum")
+        master_df["PSI_DMD"] = master_df["mean_TPM_DMD"] / (gene_totals + 1e-5)
+    else:
+        print("[!] Warning: Could not map Gene_IDs. Skipping PSI_DMD calculation.")
+
+    # Filter out unexpressed transcripts (threshold > 0.1 TPM in either condition)
     filtered_df = master_df[
         (master_df["mean_TPM_WT"] > 0.1) | (master_df["mean_TPM_DMD"] > 0.1)
     ].reset_index()
@@ -121,7 +159,7 @@ def parse_and_aggregate_quants() -> Path:
 
 def main():
     if shutil.which("salmon") is None:
-        print("ERROR: 'salmon' binary not found in active environment.")
+        print("ERROR: 'salmon' binary not found in active conda environment.")
         sys.exit(1)
 
     QUANT_DIR.mkdir(parents=True, exist_ok=True)
