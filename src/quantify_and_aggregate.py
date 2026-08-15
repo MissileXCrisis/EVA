@@ -109,7 +109,7 @@ def run_salmon_quant(sra_id: str) -> Path:
 
 
 def parse_and_aggregate_quants() -> Path:
-    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and per-gene Isoform Fraction (IF_DMD)."""
+    """Merges quant.sf files, calculates WT/DMD mean TPMs, fold changes, and per-gene Isoform Fractions (IF_WT & IF_DMD)."""
     print("\n[+] Merging sample quantifications into master splicing matrix...")
 
     dataframes = {}
@@ -140,19 +140,24 @@ def parse_and_aggregate_quants() -> Path:
     if tx2gene:
         master_df["Gene_ID"] = master_df.index.map(tx2gene)
 
-    # Compute Isoform Fraction (IF_DMD) PER GENE
+    # Compute Isoform Fractions PER GENE for BOTH conditions
     if "Gene_ID" in master_df.columns and master_df["Gene_ID"].notna().any():
-        gene_totals = master_df.groupby("Gene_ID")["mean_TPM_DMD"].transform("sum")
-        master_df["IF_DMD"] = master_df["mean_TPM_DMD"] / (gene_totals + 1e-5)
+        # DMD Isoform Fraction
+        gene_totals_dmd = master_df.groupby("Gene_ID")["mean_TPM_DMD"].transform("sum")
+        master_df["IF_DMD"] = master_df["mean_TPM_DMD"] / (gene_totals_dmd + 1e-5)
+
+        # WT Isoform Fraction
+        gene_totals_wt = master_df.groupby("Gene_ID")["mean_TPM_WT"].transform("sum")
+        master_df["IF_WT"] = master_df["mean_TPM_WT"] / (gene_totals_wt + 1e-5)
     else:
-        print("[!] Warning: Could not map Gene_IDs. Skipping IF_DMD calculation.")
+        print("[!] Warning: Could not map Gene_IDs. Skipping IF calculation.")
 
     # Filter out unexpressed transcripts (threshold > 0.1 TPM in either condition)
     filtered_df = master_df[
         (master_df["mean_TPM_WT"] > 0.1) | (master_df["mean_TPM_DMD"] > 0.1)
     ].reset_index()
 
-    output_csv = PROCESSED_DIR / "dmd_splicing_matrix.csv"
+    output_csv = PROCESSED_DIR / "splicing_matrix.csv"
     filtered_df.to_csv(output_csv, index=False)
 
     print(f"[✓] Matrix saved ({len(filtered_df)} transcripts) to: {output_csv}")

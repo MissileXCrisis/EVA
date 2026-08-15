@@ -52,7 +52,7 @@ def run_qc_on_sample(sra_id: str):
         "--qualified_quality_phred",
         "20",
         "--thread",
-        "4",
+        "6",
     ]
 
     try:
